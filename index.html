@@ -3,37 +3,60 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Iniciando sesión con Google...</title>
+  <title>Continuar con Google - Rematte</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
-    body {
+    * {
+      box-sizing: border-box;
       margin: 0;
+      padding: 0;
+    }
+    body {
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
+      padding-top: 48px;
       background: #ffffff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     }
-    .loader {
-      width: 42px;
-      height: 42px;
-      border: 3.5px solid #f1f5f9;
-      border-top-color: #08655f;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+      padding: 0 16px;
     }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
+    .header h2 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+    .header p {
+      font-size: 14px;
+      color: #64748b;
+    }
+    #google_btn_container {
+      display: flex;
+      justify-content: center;
+      width: 100%;
+      padding: 0 16px;
     }
   </style>
 </head>
 <body>
-  <div class="loader"></div>
+  <div class="header">
+    <h2>Elige una cuenta</h2>
+    <p>para continuar en Rematte</p>
+  </div>
+
+  <div id="google_btn_container">
+    <div id="google_btn"></div>
+  </div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
     const parentOrigin = params.get('parent_origin');
-    const hashParams = new URLSearchParams(window.location.hash.substring(1));
 
     const ALLOWED_PARENTS = [
       'https://app.rematte.lat',
@@ -42,41 +65,69 @@
       'http://localhost:5173'
     ];
 
-    // Si Google ya nos devolvió el id_token en el hash (Callback de OAuth2)
-    const idToken = hashParams.get('id_token');
-    const error = hashParams.get('error');
+    function sendResult(payload) {
+      if (!window.opener) return;
+      if (!ALLOWED_PARENTS.includes(parentOrigin)) return;
 
-    if (idToken || error) {
-      if (window.opener) {
-        const savedOrigin = sessionStorage.getItem('rematte_parent_origin') || parentOrigin;
-        window.opener.postMessage(
-          JSON.stringify({
-            type: 'REMATTE_GOOGLE_RESULT',
-            ok: Boolean(idToken),
-            id_token: idToken || null,
-            error: error || null
-          }),
-          savedOrigin || '*'
-        );
-      }
-      window.close();
-    } else {
-      // Primera llegada: Redirigir de inmediato al Selector de Cuentas Oficial de Google
-      if (parentOrigin) {
-        sessionStorage.setItem('rematte_parent_origin', parentOrigin);
-      }
-
-      const clientId = '344274172874-qqofph676k3m9lad6jquai6siqtpu913.apps.googleusercontent.com';
-      const redirectUri = window.location.origin + window.location.pathname;
-      const scope = 'openid email profile';
-      const responseType = 'id_token';
-      const nonce = Math.random().toString(36).substring(2);
-
-      // prompt=select_account fuerza a Google a mostrar SIEMPRE la lista completa arriba
-      const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=${encodeURIComponent(responseType)}&scope=${encodeURIComponent(scope)}&nonce=${nonce}&prompt=select_account`;
-
-      window.location.replace(googleAuthUrl);
+      window.opener.postMessage(
+        JSON.stringify({
+          type: 'REMATTE_GOOGLE_RESULT',
+          ...payload
+        }),
+        parentOrigin
+      );
     }
+
+    function initGoogle() {
+      google.accounts.id.initialize({
+        client_id: '344274172874-qqofph676k3m9lad6jquai6siqtpu913.apps.googleusercontent.com',
+        ux_mode: 'popup',
+        auto_select: false,
+        callback: function (response) {
+          try {
+            if (response && response.credential) {
+              sendResult({
+                ok: true,
+                id_token: response.credential
+              });
+              window.close();
+            } else {
+              sendResult({
+                ok: false,
+                error: 'NO_CREDENTIAL'
+              });
+            }
+          } catch (e) {
+            sendResult({
+              ok: false,
+              error: 'CALLBACK_ERROR'
+            });
+          }
+        }
+      });
+
+      google.accounts.id.renderButton(
+        document.getElementById('google_btn'),
+        {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          text: 'continue_with',
+          shape: 'pill',
+          logo_alignment: 'left',
+          width: 320
+        }
+      );
+    }
+
+    window.onload = function () {
+      if (!ALLOWED_PARENTS.includes(parentOrigin)) {
+        document.body.innerHTML = '<div style="padding:24px;font-family:Arial;text-align:center">Origen no permitido.</div>';
+        return;
+      }
+
+      initGoogle();
+    };
   </script>
 </body>
 </html>
