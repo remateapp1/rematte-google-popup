@@ -49,6 +49,7 @@
 
     const ALLOWED_PARENTS = [
       'https://app.rematte.lat',
+      'https://app-test.rematte.lat',
       'http://localhost:3000',
       'http://localhost:5173'
     ];
@@ -70,6 +71,8 @@
       google.accounts.id.initialize({
         client_id: '344274172874-qqofph676k3m9lad6jquai6siqtpu913.apps.googleusercontent.com',
         ux_mode: 'popup',
+        auto_select: false,
+        prompt_parent_id: 'google_btn',
         callback: function (response) {
           try {
             if (response && response.credential) {
@@ -99,7 +102,7 @@
           type: 'standard',
           theme: 'outline',
           size: 'large',
-          text: 'signin_with',
+          text: 'continue_with',
           shape: 'rectangular',
           logo_alignment: 'left',
           width: 320
@@ -118,4 +121,3 @@
   </script>
 </body>
 </html>
-
