@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Iniciando sesión con Google...</title>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body {
       margin: 0;
@@ -12,23 +11,13 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #f8fafc;
+      background: #ffffff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     }
-    .card {
-      width: 100%;
-      max-width: 380px;
-      padding: 32px 24px;
-      border-radius: 20px;
-      background: white;
-      box-shadow: 0 10px 30px rgba(0,0,0,.06);
-      text-align: center;
-    }
-    .spinner {
-      width: 40px;
-      height: 40px;
-      margin: 16px auto;
-      border: 3.5px solid #e2e8f0;
+    .loader {
+      width: 42px;
+      height: 42px;
+      border: 3.5px solid #f1f5f9;
       border-top-color: #08655f;
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
@@ -36,36 +25,15 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
-    h3 {
-      color: #0f172a;
-      font-size: 17px;
-      margin: 0 0 8px;
-      font-weight: 600;
-    }
-    p {
-      color: #64748b;
-      font-size: 13.5px;
-      margin: 0;
-      line-height: 1.4;
-    }
-    #google_btn_fallback {
-      display: flex;
-      justify-content: center;
-      margin-top: 20px;
-    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="spinner"></div>
-    <h3>Conectando con Google</h3>
-    <p>Elige tu cuenta en la ventana emergente para continuar</p>
-    <div id="google_btn_fallback" style="display: none;"></div>
-  </div>
+  <div class="loader"></div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
     const parentOrigin = params.get('parent_origin');
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
 
     const ALLOWED_PARENTS = [
       'https://app.rematte.lat',
@@ -74,76 +42,41 @@
       'http://localhost:5173'
     ];
 
-    function sendResult(payload) {
-      if (!window.opener) return;
-      if (!ALLOWED_PARENTS.includes(parentOrigin)) return;
+    // Si Google ya nos devolvió el id_token en el hash (Callback de OAuth2)
+    const idToken = hashParams.get('id_token');
+    const error = hashParams.get('error');
 
-      window.opener.postMessage(
-        JSON.stringify({
-          type: 'REMATTE_GOOGLE_RESULT',
-          ...payload
-        }),
-        parentOrigin
-      );
-    }
-
-    function initGoogle() {
-      google.accounts.id.initialize({
-        client_id: '344274172874-qqofph676k3m9lad6jquai6siqtpu913.apps.googleusercontent.com',
-        ux_mode: 'popup',
-        auto_select: false,
-        cancel_on_tap_outside: false,
-        callback: function (response) {
-          try {
-            if (response && response.credential) {
-              sendResult({
-                ok: true,
-                id_token: response.credential
-              });
-              window.close();
-            } else {
-              sendResult({
-                ok: false,
-                error: 'NO_CREDENTIAL'
-              });
-            }
-          } catch (e) {
-            sendResult({
-              ok: false,
-              error: 'CALLBACK_ERROR'
-            });
-          }
-        }
-      });
-
-      // Disparar inmediatamente el selector nativo de Google (Prompt)
-      google.accounts.id.prompt((notification) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          // Si el navegador bloqueó el prompt automático, muestra el botón estándar como respaldo
-          document.getElementById('google_btn_fallback').style.display = 'flex';
-          google.accounts.id.renderButton(
-            document.getElementById('google_btn_fallback'),
-            {
-              type: 'standard',
-              theme: 'outline',
-              size: 'large',
-              text: 'continue_with',
-              shape: 'rectangular',
-              width: 280
-            }
-          );
-        }
-      });
-    }
-
-    window.onload = function () {
-      if (!ALLOWED_PARENTS.includes(parentOrigin)) {
-        document.body.innerHTML = '<div style="padding:24px;font-family:Arial">Origen no permitido.</div>';
-        return;
+    if (idToken || error) {
+      if (window.opener) {
+        const savedOrigin = sessionStorage.getItem('rematte_parent_origin') || parentOrigin;
+        window.opener.postMessage(
+          JSON.stringify({
+            type: 'REMATTE_GOOGLE_RESULT',
+            ok: Boolean(idToken),
+            id_token: idToken || null,
+            error: error || null
+          }),
+          savedOrigin || '*'
+        );
+      }
+      window.close();
+    } else {
+      // Primera llegada: Redirigir de inmediato al Selector de Cuentas Oficial de Google
+      if (parentOrigin) {
+        sessionStorage.setItem('rematte_parent_origin', parentOrigin);
       }
 
-      initGoogle();
-    };
+      const clientId = '344274172874-qqofph676k3m9lad6jquai6siqtpu913.apps.googleusercontent.com';
+      const redirectUri = window.location.origin + window.location.pathname;
+      const scope = 'openid email profile';
+      const responseType = 'id_token';
+      const nonce = Math.random().toString(36).substring(2);
+
+      // prompt=select_account fuerza a Google a mostrar SIEMPRE la lista completa arriba
+      const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=${encodeURIComponent(responseType)}&scope=${encodeURIComponent(scope)}&nonce=${nonce}&prompt=select_account`;
+
+      window.location.replace(googleAuthUrl);
+    }
   </script>
 </body>
 </html>
